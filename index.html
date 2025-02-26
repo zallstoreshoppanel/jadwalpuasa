@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jadwal Puasa 2025</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { text-align: center; transition: 0.3s; background: #f4f4f4; color: #333; }
+        header { background: linear-gradient(90deg, #006400, #008000); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1.8em; font-family: 'Amiri', serif; }
+        button { background: transparent; border: none; color: white; font-size: 1.5em; cursor: pointer; }
+        .container { padding: 20px; }
+        .loading { font-size: 1.2em; color: #777; }
+        .jadwal { background: white; padding: 20px; margin-top: 15px; border-radius: 10px; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1); text-align: left; }
+        .jadwal h2 { color: #008000; text-align: center; }
+        .countdown { font-size: 1.2em; font-weight: bold; color: #ff5722; margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🕌 Jadwal Puasa 2025</h1>
+        <button id="theme-toggle">🌙</button>
+    </header>
+    
+    <main>
+        <div class="container">
+            <h2>Jadwal untuk Lokasi Anda</h2>
+            <p class="loading">Mengambil data...</p>
+            <div class="jadwal" style="display: none;">
+                <h2 id="kota"></h2>
+                <p><b>Tanggal:</b> <span id="tanggal"></span></p>
+                <p><b>Waktu Sahur:</b> <span id="sahur"></span></p>
+                <p><b>Imsyak:</b> <span id="imsyak"></span></p>
+                <p><b>Buka Puasa:</b> <span id="bukaPuasa"></span></p>
+                <p class="countdown">Menunggu perhitungan...</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Mendapatkan Lokasi Pengguna
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                const { latitude, longitude } = position.coords;
+                ambilJadwalPuasa(latitude, longitude);
+            }, () => {
+                document.querySelector(".loading").textContent = "Gagal mendapatkan lokasi!";
+            });
+        } else {
+            document.querySelector(".loading").textContent = "Perangkat tidak mendukung GPS!";
+        }
+
+        // Ambil Jadwal Puasa dari API
+        async function ambilJadwalPuasa(lat, lon) {
+            try {
+                const response = await fetch(`https://api.aladhan.com/v1/timings?latitude=${lat}&longitude=${lon}&method=2`);
+                const data = await response.json();
+
+                const tanggal = data.data.date.readable;
+                let sahur = kurangiMenit(data.data.timings.Imsak, 10); // Sahur = 10 menit sebelum Imsyak
+                const imsyak = data.data.timings.Imsak;
+                const bukaPuasa = data.data.timings.Maghrib;
+                const kota = data.data.meta.timezone;
+
+                document.getElementById("kota").textContent = kota;
+                document.getElementById("tanggal").textContent = tanggal;
+                document.getElementById("sahur").textContent = sahur;
+                document.getElementById("imsyak").textContent = imsyak;
+                document.getElementById("bukaPuasa").textContent = bukaPuasa;
+
+                document.querySelector(".loading").style.display = "none";
+                document.querySelector(".jadwal").style.display = "block";
+
+                hitungMundur(sahur, imsyak, bukaPuasa);
+            } catch (error) {
+                document.querySelector(".loading").textContent = "Gagal memuat jadwal!";
+            }
+        }
+
+        // Mengurangi Waktu Sahur dari Imsyak
+        function kurangiMenit(waktu, menit) {
+            let [jam, mnt] = waktu.split(":").map(Number);
+            let totalMenit = jam * 60 + mnt - menit;
+            let jamBaru = Math.floor(totalMenit / 60);
+            let menitBaru = totalMenit % 60;
+            return `${jamBaru.toString().padStart(2, "0")}:${menitBaru.toString().padStart(2, "0")}`;
+        }
+
+        // Hitung Mundur Live
+        function hitungMundur(sahur, imsyak, bukaPuasa) {
+            function updateCountdown() {
+                let now = new Date();
+                let waktuSekarang = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+                
+                let waktuSahur = konversiKeDetik(sahur);
+                let waktuImsyak = konversiKeDetik(imsyak);
+                let waktuBuka = konversiKeDetik(bukaPuasa);
+                
+                let target, pesan;
+                if (waktuSekarang < waktuSahur) {
+                    target = waktuSahur;
+                    pesan = "Sahur akan berakhir dalam: ";
+                } else if (waktuSekarang < waktuImsyak) {
+                    target = waktuImsyak;
+                    pesan = "Menuju Imsyak: ";
+                } else if (waktuSekarang < waktuBuka) {
+                    target = waktuBuka;
+                    pesan = "Menuju Buka Puasa: ";
+                } else {
+                    target = konversiKeDetik("23:59");
+                    pesan = "Menunggu hari berikutnya...";
+                }
+
+                let sisaDetik = target - waktuSekarang;
+                let jam = Math.floor(sisaDetik / 3600);
+                let menit = Math.floor((sisaDetik % 3600) / 60);
+                let detik = sisaDetik % 60;
+                
+                document.querySelector(".countdown").textContent = `${pesan} ${jam}j ${menit}m ${detik}d`;
+                setTimeout(updateCountdown, 1000);
+            }
+            updateCountdown();
+        }
+
+        // Konversi Waktu ke Detik
+        function konversiKeDetik(waktu) {
+            let [jam, menit] = waktu.split(":").map(Number);
+            return jam * 3600 + menit * 60;
+        }
+
+    </script>
+</body>
+</html>
